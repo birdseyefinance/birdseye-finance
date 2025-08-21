@@ -1,0 +1,89 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id          String       @id @default(cuid())
+  email       String?      @unique
+  createdAt   DateTime     @default(now())
+  connections Connection[]
+  accounts    Account[]
+}
+
+model Connection {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  kind       String   // 'plaid' | 'evm' | 'solana' | 'btc' | 'tron'
+  providerId String   // item_id, address, xpub, etc.
+  label      String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  accounts     Account[]
+  transactions Transaction[]
+}
+
+model Account {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+
+  connectionId  String?
+  connection    Connection? @relation(fields: [connectionId], references: [id])
+
+  accountType   String      // 'checking','credit','brokerage','wallet'
+  displayName   String?
+  referenceId   String?     // bank acct_id or address
+  currency      String      @default("USD")
+  createdAt     DateTime    @default(now())
+
+  positions     Position[]
+  transactions  Transaction[]
+}
+
+model Position {
+  id           String   @id @default(cuid())
+  accountId    String
+  account      Account  @relation(fields: [accountId], references: [id])
+
+  instrument   String   // 'security','token','nft','lp'
+  symbol       String?
+  chain        String?
+  contract     String?
+  qty          Decimal?
+  costBasis    Decimal?
+  currency     String   @default("USD")
+  updatedAt    DateTime @default(now())
+}
+
+model Transaction {
+  id                 String      @id @default(cuid())
+  connectionId       String
+  connection         Connection  @relation(fields: [connectionId], references: [id])
+  accountId          String?
+  account            Account?    @relation(fields: [accountId], references: [id])
+
+  plaidItemId        String?
+  plaidAccountId     String?
+  plaidTransactionId String?     @unique
+
+  name               String?
+  merchantName       String?
+  amount             Decimal
+  isoCurrency        String      @default("USD")
+  pending            Boolean     @default(false)
+  categories         Json?
+  authorizedDate     DateTime?
+  postedDate         DateTime?
+
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@index([connectionId, postedDate])
+}

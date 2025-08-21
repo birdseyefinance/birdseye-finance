@@ -1,0 +1,7 @@
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Optional: tiny design tokens for quick polish */
+:root { --card: 255 255 255; --bg: 249 250 251; }
+body { background-color: rgb(var(--bg)); }
