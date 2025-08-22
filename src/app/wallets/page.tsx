@@ -2,73 +2,132 @@
 import useSWR from "swr";
 import { useState } from "react";
 
-const fetcher = (u: string) => fetch(u).then(r => r.json());
+type Wallet = { id: string; kind: "evm" | "solana" | "btc" | "tron"; providerId: string; label?: string };
+type Bal = { usd?: number, [k: string]: any };
+
+const fetcher = (u:string)=>fetch(u).then(r=>r.json());
+
+const apiFor = (w: Wallet) => {
+  if (w.kind === "evm")    return `/api/evm/${w.providerId}/balances`;
+  if (w.kind === "solana") return `/api/solana/${w.providerId}/balances`;
+  if (w.kind === "btc")    return `/api/btc/${w.providerId}/balances`;
+  return null; // tron not wired yet
+};
 
 export default function Wallets() {
-  const { data, mutate, isLoading } = useSWR("/api/wallets", fetcher);
-  const [kind, setKind] = useState("evm");
-  const [address, setAddress] = useState("");
-  const [label, setLabel] = useState("");
-
-  async function add() {
-    const res = await fetch("/api/wallets", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ kind, address, label })
-    });
-    const json = await res.json();
-    if (!res.ok) { alert("Add failed:\n" + JSON.stringify(json, null, 2)); return; }
-    setAddress(""); setLabel("");
-    await mutate();
-  }
-
-  async function remove(id: string) {
-    if (!confirm("Remove this wallet?")) return;
-    const res = await fetch(`/api/wallets/${id}`, { method: "DELETE" });
-    if (!res.ok) { const j = await res.json(); alert("Delete failed: " + JSON.stringify(j)); return; }
-    await mutate();
-  }
-
-  const wallets = data?.wallets || [];
+  const { data, isLoading, mutate } = useSWR<{wallets: Wallet[]}>("/api/wallets", fetcher);
+  const wallets = data?.wallets ?? [];
 
   return (
-    <main className="p-6 max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Wallets</h1>
-        <a href="/net-worth" className="px-3 py-2 rounded-xl bg-black text-white">Go to Net Worth</a>
-      </div>
+        <button onClick={()=>mutate()} className="px-3 py-2 rounded-xl bg-black text-white">Refresh list</button>
+      </header>
 
-      <div className="p-4 rounded-xl border bg-white space-y-3">
-        <h2 className="font-medium">Add wallet</h2>
-        <div className="flex flex-col gap-3 md:flex-row">
-          <select className="px-3 py-2 rounded-lg border" value={kind} onChange={e=>setKind(e.target.value)}>
-            <option value="evm">Ethereum (EVM)</option>
-            <option value="solana">Solana</option>
-            <option value="btc">Bitcoin</option>
-            <option value="tron">Tron</option>
-          </select>
-          <input className="flex-1 px-3 py-2 rounded-lg border" placeholder="Address (0x..., Sol, bc1..., TRX...)" value={address} onChange={e=>setAddress(e.target.value)} />
-          <input className="flex-1 px-3 py-2 rounded-lg border" placeholder="Label (optional)" value={label} onChange={e=>setLabel(e.target.value)} />
-          <button onClick={add} className="px-4 py-2 rounded-xl bg-black text-white">Add</button>
+      <AddWalletForm onAdded={mutate} />
+
+      {isLoading ? <p>Loading wallets…</p> :
+        <div className="grid gap-4 md:grid-cols-2">
+          {wallets.map((w) => <WalletRow key={w.id} w={w} onDeleted={mutate} />)}
+          {wallets.length === 0 && <p className="text-sm text-gray-600">No wallets yet. Add one above.</p>}
         </div>
-      </div>
+      }
+    </div>
+  );
+}
 
-      <div className="p-4 rounded-xl border bg-white">
-        <h2 className="font-medium mb-2">Saved wallets</h2>
-        {isLoading ? <p>Loading…</p> : wallets.length === 0 ? <p className="text-gray-600">No wallets yet.</p> :
-          <ul className="divide-y">
-            {wallets.map((w:any) => (
-              <li key={w.id} className="py-3 flex items-center justify-between">
-                <div>
-                  <div className="font-medium">{w.label || w.kind.toUpperCase()}</div>
-                  <div className="text-sm text-gray-600">{w.kind.toUpperCase()} · {w.providerId}</div>
-                </div>
-                <button onClick={()=>remove(w.id)} className="px-3 py-2 rounded-lg border">Remove</button>
-              </li>
-            ))}
-          </ul>
-        }
+function WalletRow({ w, onDeleted }: { w: Wallet, onDeleted: ()=>void }) {
+  const url = apiFor(w);
+  const { data, isLoading, mutate } = useSWR<Bal>(url ?? "", url ? (u)=>fetch(u).then(r=>r.json()) : null);
+
+  // ENS reverse for EVM
+  const { data: ens } = useSWR<{ name?: string }>(
+    w.kind === "evm" ? `/api/ens/${w.providerId}/name` : null,
+    (u)=>fetch(u).then(r=>r.json())
+  );
+
+  async function remove() {
+    await fetch(`/api/wallets/${w.id}`, { method: "DELETE" });
+    onDeleted();
+  }
+
+  const nice = w.kind === "evm" && ens?.name ? ens.name : (w.label || w.providerId);
+  const usd = data?.usd ?? 0;
+
+  return (
+    <div className="rounded-xl border bg-white p-4 flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <div className="text-xs text-gray-500 uppercase tracking-wide">{w.kind}</div>
+        <div className="font-medium break-all">{nice}</div>
+        <div className="text-sm text-gray-600">{isLoading ? "Fetching…" : `$${usd.toLocaleString(undefined,{maximumFractionDigits:2})}`}</div>
       </div>
-    </main>
+      <div className="flex gap-2">
+        <button onClick={()=>mutate()} className="px-3 py-2 rounded-lg border">Refresh</button>
+        <button onClick={remove} className="px-3 py-2 rounded-lg border text-red-600">Remove</button>
+      </div>
+    </div>
+  );
+}
+
+function AddWalletForm({ onAdded }: { onAdded: ()=>void }) {
+  const [kind, setKind] = useState<Wallet["kind"]>("evm");
+  const [address, setAddress] = useState("");
+  const [label, setLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    if (!address.trim()) { setErr("Address is required"); return; }
+
+    // Minimal client-side validation
+    if (kind === "evm" && !/^0x[0-9a-fA-F]{40}$/.test(address.trim())) {
+      setErr("EVM address must be 0x + 40 hex chars"); return;
+    }
+    if (kind === "solana" && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address.trim())) {
+      setErr("Solana address looks invalid"); return;
+    }
+    if (kind === "btc" && address.length < 26) {
+      setErr("BTC address looks too short"); return;
+    }
+
+    setBusy(true);
+    try {
+      const res = await fetch("/api/wallets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, providerId: address.trim(), label: label.trim() || undefined }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(()=>({}));
+        throw new Error(j?.error || `HTTP ${res.status}`);
+      }
+      setAddress(""); setLabel("");
+      onAdded();
+    } catch (e:any) {
+      setErr(e.message || "Failed to add wallet");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-xl border bg-white p-4 space-y-3">
+      <div className="flex flex-wrap gap-3">
+        <select value={kind} onChange={e=>setKind(e.target.value as any)} className="border rounded-lg px-3 py-2">
+          <option value="evm">EVM (Ethereum)</option>
+          <option value="solana">Solana</option>
+          <option value="btc">Bitcoin</option>
+          <option value="tron" disabled>Tron (coming soon)</option>
+        </select>
+        <input value={address} onChange={e=>setAddress(e.target.value)} placeholder="Address" className="border rounded-lg px-3 py-2 flex-1 min-w-[280px]" />
+        <input value={label} onChange={e=>setLabel(e.target.value)} placeholder="Optional label" className="border rounded-lg px-3 py-2 flex-1 min-w-[200px]" />
+        <button disabled={busy} className="px-4 py-2 rounded-xl bg-black text-white disabled:opacity-50">Add</button>
+      </div>
+      {err && <p className="text-sm text-red-600">{err}</p>}
+      <p className="text-xs text-gray-500">Tip: EVM addresses show their ENS name automatically if one exists.</p>
+    </form>
   );
 }

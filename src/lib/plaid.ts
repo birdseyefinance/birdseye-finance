@@ -1,16 +1,17 @@
-﻿import { Configuration, PlaidApi, PlaidEnvironments, Products } from "plaid";
+﻿import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 
-const envName = (process.env.PLAID_ENV || "sandbox") as keyof typeof PlaidEnvironments;
+const env = (process.env.PLAID_ENV || "sandbox") as keyof typeof PlaidEnvironments;
+const basePath = PlaidEnvironments[env];
 
-const config = new Configuration({
-  basePath: PlaidEnvironments[envName],
+const configuration = new Configuration({
+  basePath,
   baseOptions: {
     headers: {
       "PLAID-CLIENT-ID": process.env.PLAID_CLIENT_ID || "",
       "PLAID-SECRET": process.env.PLAID_SECRET || "",
+      "Plaid-Version": "2020-09-14",
     },
   },
 });
 
-export const plaid = new PlaidApi(config);
-export const plaidProducts = [Products.Transactions, Products.Investments];
+export const plaid = new PlaidApi(configuration);

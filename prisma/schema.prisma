@@ -19,8 +19,8 @@ model Connection {
   id         String   @id @default(cuid())
   userId     String
   user       User     @relation(fields: [userId], references: [id])
-  kind       String   // 'plaid' | 'evm' | 'solana' | 'btc' | 'tron'
-  providerId String   // item_id, address, xpub, etc.
+  kind       String // 'plaid' | 'evm' | 'solana' | 'btc' | 'tron'
+  providerId String // item_id, address, xpub, etc.
   label      String?
   metadata   Json?
   createdAt  DateTime @default(now())
@@ -30,60 +30,85 @@ model Connection {
 }
 
 model Account {
-  id            String      @id @default(cuid())
-  userId        String
-  user          User        @relation(fields: [userId], references: [id])
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  connectionId  String?
-  connection    Connection? @relation(fields: [connectionId], references: [id])
+  connectionId String?
+  connection   Connection? @relation(fields: [connectionId], references: [id])
 
-  accountType   String      // 'checking','credit','brokerage','wallet'
-  displayName   String?
-  referenceId   String?     // bank acct_id or address
-  currency      String      @default("USD")
-  createdAt     DateTime    @default(now())
+  accountType String // 'checking','credit','brokerage','wallet'
+  displayName String?
+  referenceId String? // bank acct_id or address
+  currency    String   @default("USD")
+  createdAt   DateTime @default(now())
 
-  positions     Position[]
-  transactions  Transaction[]
+  positions    Position[]
+  transactions Transaction[]
 }
 
 model Position {
-  id           String   @id @default(cuid())
-  accountId    String
-  account      Account  @relation(fields: [accountId], references: [id])
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
 
-  instrument   String   // 'security','token','nft','lp'
-  symbol       String?
-  chain        String?
-  contract     String?
-  qty          Decimal?
-  costBasis    Decimal?
-  currency     String   @default("USD")
-  updatedAt    DateTime @default(now())
+  instrument String // 'security','token','nft','lp'
+  symbol     String?
+  chain      String?
+  contract   String?
+  qty        Decimal?
+  costBasis  Decimal?
+  currency   String   @default("USD")
+  updatedAt  DateTime @default(now())
 }
 
 model Transaction {
-  id                 String      @id @default(cuid())
-  connectionId       String
-  connection         Connection  @relation(fields: [connectionId], references: [id])
-  accountId          String?
-  account            Account?    @relation(fields: [accountId], references: [id])
+  id           String     @id @default(cuid())
+  connectionId String
+  connection   Connection @relation(fields: [connectionId], references: [id])
+  accountId    String?
+  account      Account?   @relation(fields: [accountId], references: [id])
 
   plaidItemId        String?
   plaidAccountId     String?
-  plaidTransactionId String?     @unique
+  plaidTransactionId String? @unique
 
-  name               String?
-  merchantName       String?
-  amount             Decimal
-  isoCurrency        String      @default("USD")
-  pending            Boolean     @default(false)
-  categories         Json?
-  authorizedDate     DateTime?
-  postedDate         DateTime?
+  name           String?
+  merchantName   String?
+  amount         Decimal
+  isoCurrency    String    @default("USD")
+  pending        Boolean   @default(false)
+  categories     Json?
+  authorizedDate DateTime?
+  postedDate     DateTime?
 
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([connectionId, postedDate])
+}
+
+// --- Wallet model (for on-chain addresses) ---
+model Wallet {
+  id         String   @id @default(cuid())
+  userId     String
+  kind       String // "evm" | "solana" | "btc" | "tron"
+  providerId String // address
+  label      String?
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, kind, providerId])
+}
+
+// --- Net worth history ---
+model NetWorthSnapshot {
+  id          String   @id @default(cuid())
+  userId      String
+  asOf        DateTime
+  banksUSD    Float
+  walletsUSD  Float
+  netWorthUSD Float
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, asOf])
 }
