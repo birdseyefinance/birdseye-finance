@@ -1,5 +1,9 @@
-﻿{
+{
   "crons": [
-    { "path": "/api/net-worth/snapshot", "schedule": "0 10 * * *", "method": "GET" }
+    {
+      "path": "/api/net-worth/snapshot",
+      "schedule": "0 10 * * *",
+      "method": "GET"
+    }
   ]
 }
